@@ -1,0 +1,2 @@
+BOT_TOKEN = "7540038883:AAE_DFnjjs-4Yi8jOyXDKUMVhk2BE-vTBqE"
+DB_PATH = "carshare.db"
