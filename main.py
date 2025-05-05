@@ -4,47 +4,42 @@ import os
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiohttp import web
+
+from config import BOT_TOKEN
 from database.db import init_db
 from handlers import common, passenger, driver
-from config import BOT_TOKEN
-
-# Для HTTP-сервера Render
-from aiohttp import web
-import threading
 
 logging.basicConfig(level=logging.INFO)
 
-# --- Телеграм-бот ---
-async def main():
-    await init_db()
-    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-
-    # Удаляем возможный старый webhook
-    await bot.delete_webhook(drop_pending_updates=True)
-
-    dp = Dispatcher()
-    dp.include_routers(
-        common.router,
-        passenger.router,
-        driver.router,
-    )
-
-    await dp.start_polling(bot)
-
-# --- HTTP-сервер (для Render) ---
+# ─── HTTP-сервер ────────────────────────────────────────────────
 async def handle(request):
     return web.Response(text="Bot is running!")
 
-def run_web_server():
+async def run_web_server():
     port = int(os.environ.get("PORT", 8080))
     app = web.Application()
     app.router.add_get("/", handle)
-    web.run_app(app, port=port)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
 
-# --- Запуск ---
+# ─── Основной async запуск ──────────────────────────────────────
+async def main():
+    await init_db()
+
+    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    await bot.delete_webhook(drop_pending_updates=True)
+
+    dp = Dispatcher()
+    dp.include_routers(common.router, passenger.router, driver.router)
+
+    # Запуск бота и веб-сервера параллельно
+    await asyncio.gather(
+        dp.start_polling(bot),
+        run_web_server()
+    )
+
 if __name__ == "__main__":
-    # Запуск бота в отдельном потоке
-    threading.Thread(target=lambda: asyncio.run(main())).start()
-
-    # Запуск HTTP-сервера (чтобы Render видел открытый порт)
-    run_web_server()
+    asyncio.run(main())
